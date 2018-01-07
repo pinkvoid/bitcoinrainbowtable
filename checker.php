@@ -22,7 +22,7 @@ while(true){
 		$found = $search->fetch(PDO::FETCH_NUM);
 
 		if(!empty($found)){
-			print_r($found);die;
+			print_r($found);
 			file_put_contents(__DIR__.'/FOUND', $address);
 			echo 'FOUND!!!!!!!!'."\n";
 		}
