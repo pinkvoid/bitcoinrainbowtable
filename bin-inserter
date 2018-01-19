@@ -6,7 +6,8 @@ class myThread (threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
     def run(self):
-        for x in range(0,1):
+        conn = MySQLdb.connect(host= "101", port=0, user=":3",passwd=".",db="rbt")
+        for x in range(0,100):
             #s='sausage'
             #print hashlib.sha256(s).hexdigest()
 
@@ -36,14 +37,13 @@ class myThread (threading.Thread):
             print (wif + ',' + self.gen_address(pubkey)+'|')
             print(pk.serialize())
             address = self.gen_address(pubkey, True)
-            conn = MySQLdb.connect(host= "ip", port=0, user="00",passwd="00",db="rbt")
             x = conn.cursor()
             try:
               x.execute("""INSERT INTO incoming VALUES (null,%s,%s)""",(address, pk.private_key))
               conn.commit()
             except:
               conn.rollback()
-            conn.close()
+        conn.close()
 
     def gen_address(self,public_key,raw=False):
         # perform SHA-256 hashing on the public key
@@ -82,10 +82,10 @@ class myThread (threading.Thread):
 
 try:
     threads = []
-    #for x in range(0,4):
-    thread = myThread()
-    thread.start()
-    threads.append(thread)
+    for x in range(0,4):
+      thread = myThread()
+      thread.start()
+      threads.append(thread)
 
 except:
        print("Error: unable to start thread")
