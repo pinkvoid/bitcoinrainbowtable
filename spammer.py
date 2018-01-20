@@ -17,6 +17,12 @@ class myThread (threading.Thread):
         max_range = self.conf.worker.batch_and_insert_size
         i = 0
         print self.conf.worker.lifetime
+		conn = mariadb.connect(host = self.conf.db.host,
+							 user = self.conf.db.user,
+							 password = self.conf.db.pwd,
+							 database = self.conf.db.db,
+							 port = self.conf.db.port)
+		cursor = conn.cursor()
         while (self.conf.worker.lifetime == 0 or i < self.conf.worker.lifetime):
             list=[]
             for x in range(0, max_range):
@@ -30,12 +36,6 @@ class myThread (threading.Thread):
                 values.append(pk.private_key)
                 values.append(address)
                 list.append(values);
-            conn = mariadb.connect(host = self.conf.db.host,
-                                 user = self.conf.db.user,
-                                 password = self.conf.db.pwd,
-                                 database = self.conf.db.db,
-                                 port = self.conf.db.port)
-            cursor = conn.cursor()
 
             # try:
             cursor.executemany("INSERT INTO incoming(private,address) values(%s,%s)",list)
@@ -44,6 +44,8 @@ class myThread (threading.Thread):
             i += 1
             # except:
             #    conn.rollback()
+        cursor.close()
+        conn.close()
 
 
 
