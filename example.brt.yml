@@ -1,0 +1,7 @@
+# Copy to ./brt.yml
+db:
+    user: :3
+    pwd: "use apg"
+    host: dn or ip
+    port: 
+	db: space
