@@ -10,3 +10,6 @@ Check a bitcoin address against your binary database.
 
 ## sweeper.by
 Prints out WIF and bitcoin address for a hex bitcoin private key found in your database.
+
+## hammer.by
+Splits incoming table's pairs to archive and public tables for respectively archiving and fast querying.
