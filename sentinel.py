@@ -1,6 +1,16 @@
+#!/usr/bin/env python
+# sentinel.py : checks a bitcoin address against a binary table
+
+import binascii, hashlib, base58, secp256k1, threading, MySQLdb, yaml
+from dotmap import DotMap
+
+# load config
+conf = DotMap(yaml.safe_load(open("./brt.yml")))
+
 # Confirm @ https://www.bitaddress.org
-import binascii, hashlib, base58, secp256k1, threading, MySQLdb
+
 decode_hex = binascii.unhexlify
+
 def gen_address(public_key,raw=False):
   # perform SHA-256 hashing on the public key
   sha256 = hashlib.sha256()
@@ -37,17 +47,25 @@ def gen_address(public_key,raw=False):
 
 # Start:
 
-lookingfor='1Lgk7vMxqJrxh7FP5gKfFSY3T3oPZTt6Wr'
+lookingfor='1QJnVsWcLgFYz9qFcWb8bQt2ZLaW1nWofM'
 print("Looking for : "+ lookingfor)
 
-decoded = base58.b58decode(lookingfor)
+# lookup without byte version
+decoded = base58.b58decode(lookingfor)[1:]
 print("Hex address: " + binascii.hexlify(decoded))
 
-conn = MySQLdb.connect(host= ":3", port=0, user=",",passwd=".",db="rbt")
+conn = MySQLdb.connect(host = conf.db.host,
+	user = conf.db.user,
+	password = conf.db.pwd,
+	database = conf.db.db,
+	port = conf.db.port)
+	
 cursor=conn.cursor()
 sql = "SELECT * FROM incoming WHERE address = %s";
 args = [decoded]
 cursor.execute(sql,args)
 data=cursor.fetchall()
+if(data):
+  print('Found!')
 
 print(data)

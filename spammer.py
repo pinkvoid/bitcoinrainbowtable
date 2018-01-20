@@ -18,7 +18,6 @@ class myThread (threading.Thread):
         i = 0
         print self.conf.worker.lifetime
         while (self.conf.worker.lifetime == 0 or i < self.conf.worker.lifetime):
-            print("round ",i)
             list=[]
             for x in range(0, max_range):
                 values=[]
@@ -41,7 +40,7 @@ class myThread (threading.Thread):
             # try:
             cursor.executemany("INSERT INTO incoming(private,address) values(%s,%s)",list)
             conn.commit()
-            print('Process pid:'+str(threading.current_thread())+' processed : +'+str(max_range))
+            print('Process pid:'+str(threading.current_thread())+' round: '+str(i)+' processed : +'+str(max_range))
             i += 1
             # except:
             #    conn.rollback()
@@ -74,7 +73,10 @@ class myThread (threading.Thread):
         # create a checksum using the first 4 bytes of the previous SHA-256 hash
         # appedend the 4 checksum bytes to the extended RIPEMD-160 hash
         checksum = hash[:8]
-        hash = mainnet_public_key_hash + checksum
+        
+        # strip first 0x00 version byte
+        # https://en.bitcoin.it/wiki/Base58Check_encoding#Encoding_a_Bitcoin_address
+        hash = mainnet_public_key_hash[2:] + checksum
 
         # convert RIPEMD-160 + checksum into base58 encoded string
 
