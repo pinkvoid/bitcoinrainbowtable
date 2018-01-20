@@ -62,6 +62,9 @@ while (True):
 		sql = "SELECT * FROM incoming ORDER BY id ASC LIMIT 1";
 		cursor.execute(sql, [])
 		data=cursor.fetchall()
+		if(!data):
+			time.sleep(10)
+			continue
 		address = base58.b58encode(data[0][1])
 		
 		# was stored and is saved without version bit
