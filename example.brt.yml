@@ -1,7 +1,12 @@
 # Copy to ./brt.yml
 db:
-    user: :3
-    pwd: "use apg"
-    host: dn or ip
-    port: 
-	db: space
+  user: :3
+  pwd: "use apg"
+  host: dn or ip
+  port: 
+  db: space
+worker:
+  threads: 4
+  thread_start_delay: 3
+  batch_and_insert_size: 100
+  lifetime: 0
