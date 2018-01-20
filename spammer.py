@@ -17,12 +17,12 @@ class myThread (threading.Thread):
         max_range = self.conf.worker.batch_and_insert_size
         i = 0
         print self.conf.worker.lifetime
-		conn = mariadb.connect(host = self.conf.db.host,
+        conn = mariadb.connect(host = self.conf.db.host,
 							 user = self.conf.db.user,
 							 password = self.conf.db.pwd,
 							 database = self.conf.db.db,
 							 port = self.conf.db.port)
-		cursor = conn.cursor()
+        cursor = conn.cursor()
         while (self.conf.worker.lifetime == 0 or i < self.conf.worker.lifetime):
             list=[]
             for x in range(0, max_range):
