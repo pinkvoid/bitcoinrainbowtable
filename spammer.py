@@ -45,14 +45,17 @@ class myThread (threading.Thread):
 							 port = self.conf.db.port)
         cursor = conn.cursor()
         while (self.conf.worker.lifetime == 0 or i < self.conf.worker.lifetime):
-            list=[]
+            self.list=[]
             #for x in range(0, max_range):
             listdir_time = self.timereps(max_range, lambda: self.gen())
             print("%d generations per second using urandom" % (1 / listdir_time))
             try:
-                cursor.executemany("INSERT INTO incoming(private,address) values(%s,%s)",list)
+                cursor.executemany("INSERT INTO incoming(private, address) values(%s,%s);", self.list)
+                print "committing"
                 conn.commit()
+                print "commited"
             except MySQLdb.Error,e:
+                print "error"
                 print e[0], e[1]
                 # reconnect
                 conn = mariadb.connect(host = self.conf.db.host,
@@ -124,5 +127,5 @@ except:
 for thread in threads:
     thread.join(600)
 
-while True:
-    time.sleep(1)
+#~ while True:
+    #~ time.sleep(1)
