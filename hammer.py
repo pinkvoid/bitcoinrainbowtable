@@ -83,7 +83,12 @@ while (True):
 	    conn.rollback()
 	    cursor.close()
 	    conn.close()
-	    exit(2)
+	    conn = MySQLdb.connect(host = conf.db.host,
+	        user = conf.db.user,
+	        password = conf.db.pwd,
+	        database = conf.db.db,
+	        port = conf.db.port)
+        cursor=conn.cursor()
 
 cursor.close()
 conn.close()

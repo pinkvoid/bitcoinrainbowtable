@@ -1,6 +1,8 @@
 #!/usr/bin/env python
-import binascii, hashlib, base58, secp256k1, threading,MySQLdb as mariadb,os,time, yaml
+import binascii, hashlib, base58, secp256k1, threading,MySQLdb as mariadb,os,time, yaml, time
 from dotmap import DotMap
+import signal 
+import sys
 
 # load config
 conf = DotMap(yaml.safe_load(open("./brt.yml")))
@@ -10,8 +12,27 @@ decode_hex = binascii.unhexlify
 
 class myThread (threading.Thread):
     def __init__(self, conf):
-        self.conf= conf
+        self.conf = conf
         threading.Thread.__init__(self)
+        self.list = []
+    def timereps(self, reps, func):
+        from time import time
+        start = time()
+        for i in range(0, reps):
+            func()
+        end = time()
+        return (end - start) / reps
+    def gen(self):
+		values=[]
+		pk=secp256k1.PrivateKey()
+
+		pubbin=pk.pubkey.serialize(False)
+		pubkey = binascii.hexlify(pubbin)
+
+		address=self.gen_address(pubkey)
+		values.append(pk.private_key)
+		values.append(address)
+		self.list.append(values);
     def run(self):
         print('Process started pid:'+str(threading.current_thread()))
         max_range = self.conf.worker.batch_and_insert_size
@@ -25,22 +46,21 @@ class myThread (threading.Thread):
         cursor = conn.cursor()
         while (self.conf.worker.lifetime == 0 or i < self.conf.worker.lifetime):
             list=[]
-            for x in range(0, max_range):
-                values=[]
-                pk=secp256k1.PrivateKey()
-
-                pubbin=pk.pubkey.serialize(False)
-                pubkey = binascii.hexlify(pubbin)
-
-                address=self.gen_address(pubkey)
-                values.append(pk.private_key)
-                values.append(address)
-                list.append(values);
-
-            # try:
-            cursor.executemany("INSERT INTO incoming(private,address) values(%s,%s)",list)
-            conn.commit()
-            print('Process pid:'+str(threading.current_thread())+' round: '+str(i)+' processed : +'+str(max_range))
+            #for x in range(0, max_range):
+            listdir_time = self.timereps(max_range, lambda: self.gen())
+            print("%d generations per second using urandom" % (1 / listdir_time))
+            try:
+                cursor.executemany("INSERT INTO incoming(private,address) values(%s,%s)",list)
+                conn.commit()
+            except OperationalError as e:
+                # reconnect
+                conn = mariadb.connect(host = self.conf.db.host,
+                    user = self.conf.db.user,
+                    password = self.conf.db.pwd,
+                    database = self.conf.db.db,
+                    port = self.conf.db.port)
+                cursor = conn.cursor()
+            #~ print('Process pid:'+str(threading.current_thread())+' round: '+str(i)+' processed : +'+str(max_range))
             i += 1
             # except:
             #    conn.rollback()
@@ -83,16 +103,25 @@ class myThread (threading.Thread):
         # convert RIPEMD-160 + checksum into base58 encoded string
 
         return decode_hex(hash)
+        
+def signal_handler(signal, frame):
+        sys.exit(0)
+signal.signal(signal.SIGINT, signal_handler)
 
 try:
     threads = []
     for x in range(0, conf.worker.threads):
         thread = myThread(conf)
+        thread.daemon = True
         time.sleep(conf.worker.thread_start_delay)
         thread.start()
         threads.append(thread)
 
 except:
     print("Error: unable to start thread")
+
 for thread in threads:
-    thread.join()
+    thread.join(600)
+
+while True:
+    time.sleep(1)
