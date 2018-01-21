@@ -53,6 +53,7 @@ class myThread (threading.Thread):
                 cursor.executemany("INSERT INTO incoming(private,address) values(%s,%s)",list)
                 conn.commit()
             except MySQLdb.Error,e:
+                print e[0], e[1]
                 # reconnect
                 conn = mariadb.connect(host = self.conf.db.host,
                     user = self.conf.db.user,
