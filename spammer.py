@@ -1,20 +1,25 @@
 #!/usr/bin/env python
-import binascii, hashlib, base58, secp256k1, threading,MySQLdb as mariadb,os,time, yaml, time
+import binascii, hashlib, base58, secp256k1, threading, MySQLdb,os,time, yaml, time
 from dotmap import DotMap
-import signal 
-import sys
+import signal, sys
 
-# load config
 conf = DotMap(yaml.safe_load(open("./brt.yml")))
 
-# alias method
 decode_hex = binascii.unhexlify
 
 class myThread (threading.Thread):
-    def __init__(self, conf):
+    conn = None
+    conf = None
+    cursor = None
+    thread_id = 0
+    rows = []
+
+    def __init__(self, conf, thread_id):
         self.conf = conf
         threading.Thread.__init__(self)
         self.list = []
+        self.thread_id = thread_id
+
     def timereps(self, reps, func):
         from time import time
         start = time()
@@ -22,56 +27,59 @@ class myThread (threading.Thread):
             func()
         end = time()
         return (end - start) / reps
+
     def gen(self):
-		values=[]
-		pk=secp256k1.PrivateKey()
+        values=[]
+	pk=secp256k1.PrivateKey()
+	pubbin=pk.pubkey.serialize(False)
+	pubkey = binascii.hexlify(pubbin)
+	address=self.gen_address(pubkey)
+	values.append(pk.private_key)
+	values.append(address)
+	self.rows.append(values);
 
-		pubbin=pk.pubkey.serialize(False)
-		pubkey = binascii.hexlify(pubbin)
+    def connect(self):
+        if(not self.conf.db.pwd):
+            self.conn = MySQLdb.connect(host = self.conf.db.host,
+                user = self.conf.db.user,
+                database = self.conf.db.db)
+        else:
+            self.conn = MySQLdb.connect(host = self.conf.db.host,
+                user = self.conf.db.user,
+                password = self.conf.db.pwd,
+                database = self.conf.db.db,
+                port = self.conf.db.port)
+        self.cursor = self.conn.cursor()
 
-		address=self.gen_address(pubkey)
-		values.append(pk.private_key)
-		values.append(address)
-		self.list.append(values);
+    def closeConnection(self):
+        self.close()
+        self.conn.close()
+    
+    def savegen(self):
+        saved = None
+        while( not saved):
+            try:
+                self.cursor.executemany("INSERT INTO incoming(private, address) values(%s, %s);", self.rows)
+                self.conn.commit()
+                saved = True
+            except (MySQLdb.Error, MySQLdb.Warning) as e:
+                print(e)
+                print("Reconnecting...")
+                self.connect()
+
+
     def run(self):
-        print('Process started pid:'+str(threading.current_thread()))
+        self.connect()
+        print('Thread %s started' % self.thread_id)
         max_range = self.conf.worker.batch_and_insert_size
         i = 0
-        print self.conf.worker.lifetime
-        conn = mariadb.connect(host = self.conf.db.host,
-							 user = self.conf.db.user,
-							 password = self.conf.db.pwd,
-							 database = self.conf.db.db,
-							 port = self.conf.db.port)
-        cursor = conn.cursor()
         while (self.conf.worker.lifetime == 0 or i < self.conf.worker.lifetime):
-            self.list=[]
-            #for x in range(0, max_range):
-            listdir_time = self.timereps(max_range, lambda: self.gen())
-            print("%d generations per second using urandom" % (1 / listdir_time))
-            try:
-                cursor.executemany("INSERT INTO incoming(private, address) values(%s,%s);", self.list)
-                print "committing"
-                conn.commit()
-                print "commited"
-            except MySQLdb.Error,e:
-                print "error"
-                print e[0], e[1]
-                # reconnect
-                conn = mariadb.connect(host = self.conf.db.host,
-                    user = self.conf.db.user,
-                    password = self.conf.db.pwd,
-                    database = self.conf.db.db,
-                    port = self.conf.db.port)
-                cursor = conn.cursor()
-            #~ print('Process pid:'+str(threading.current_thread())+' round: '+str(i)+' processed : +'+str(max_range))
-            i += 1
-            # except:
-            #    conn.rollback()
-        cursor.close()
-        conn.close()
-
-
+                self.rows=[]
+                listdir_time = self.timereps(max_range, lambda: self.gen())
+                print("Thread %d : %d keypairs/s" % (self.thread_id, 1 / listdir_time))
+                self.savegen()
+                i += 1
+        self.closeConnection()
 
     def gen_address(self,public_key):
         # perform SHA-256 hashing on the public key
@@ -103,19 +111,20 @@ class myThread (threading.Thread):
         # strip first 0x00 version byte
         # https://en.bitcoin.it/wiki/Base58Check_encoding#Encoding_a_Bitcoin_address
         hash = mainnet_public_key_hash[2:] + checksum
-
-        # convert RIPEMD-160 + checksum into base58 encoded string
-
         return decode_hex(hash)
+
+# Main :
         
 def signal_handler(signal, frame):
+        print('Manual exit')
         sys.exit(0)
+
 signal.signal(signal.SIGINT, signal_handler)
 
 try:
     threads = []
     for x in range(0, conf.worker.threads):
-        thread = myThread(conf)
+        thread = myThread(conf, x + 1)
         thread.daemon = True
         time.sleep(conf.worker.thread_start_delay)
         thread.start()
@@ -126,6 +135,3 @@ except:
 
 for thread in threads:
     thread.join(600)
-
-#~ while True:
-    #~ time.sleep(1)
