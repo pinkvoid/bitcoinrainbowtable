@@ -1,96 +1,91 @@
 #!/usr/bin/env python
 # hammer.py : splits incoming table's pairs to archive and public tables
 
-import binascii, hashlib, base58, secp256k1, threading, MySQLdb, yaml
+import MySQLdb, yaml
 from dotmap import DotMap
 
 # load config
 conf = DotMap(yaml.safe_load(open("./brt.yml")))
 
-# Confirm @ https://www.bitaddress.org
-
-decode_hex = binascii.unhexlify
-
-def gen_address(public_key,raw=False):
-  # perform SHA-256 hashing on the public key
-  sha256 = hashlib.sha256()
-  sha256.update( decode_hex(public_key) )
-  hash = sha256.hexdigest()
-  
-  # public key hash (for p2pkh) - perform RIPEMD-160 hashing on the result of SHA-256
-  # prepend mainnet version byte
-  ripemd160 = hashlib.new('ripemd160')
-  ripemd160.update( decode_hex(hash) )
-  public_key_hash = ripemd160.hexdigest()
-  mainnet_public_key_hash = '00' + public_key_hash
-  
-  # perform SHA-256 hash on the extended RIPEMD-160 result
-  sha256 = hashlib.sha256()
-  sha256.update( decode_hex(mainnet_public_key_hash) )
-  hash = sha256.hexdigest()
-  
-  # perform SHA-256 on the previous SHA-256 hash
-  sha256 = hashlib.sha256()
-  sha256.update( decode_hex(hash) )
-  hash = sha256.hexdigest()
-  
-  # create a checksum using the first 4 bytes of the previous SHA-256 hash
-  # appedend the 4 checksum bytes to the extended RIPEMD-160 hash
-  checksum = hash[:8]
-  hash = mainnet_public_key_hash + checksum
-  
-  # convert RIPEMD-160 + checksum into base58 encoded string
-  if(raw):
-    return decode_hex(hash)
-  else:
-    return base58.b58encode( decode_hex(hash) )
-
-# Start:
-
 # Select oldest
 conn = MySQLdb.connect(host = conf.db.host,
 	user = conf.db.user,
-	password = conf.db.pwd,
-	database = conf.db.db,
-	port = conf.db.port)
+	database = conf.db.db)
 	
 cursor=conn.cursor()
 
-i = 0
-while (True):
-	try:
-		sql = "SELECT * FROM incoming ORDER BY id ASC LIMIT 1";
-		cursor.execute(sql, [])
-		data=cursor.fetchall()
-		if not data:
-			time.sleep(10)
-			continue
-		address = base58.b58encode(data[0][1])
-		
-		# was stored and is saved without version bit
-		public = [address]
-		cursor.execute("INSERT INTO public(address) values(%s)", public)
-		
-		archive = [cursor.lastrowid, data[0][2]]
-		cursor.execute("INSERT INTO archive(public_id, pkey) values(%s,%s)", archive)
-		
-		cursor.execute("DELETE FROM incoming WHERE id = %s", [data[0][0]])
-		conn.commit()
-		i += 1
-		print(str(i))
-	except MySQLdb.Error,e:
-	    print e[0], e[1]
-	    conn.rollback()
-	    cursor.close()
-	    conn.close()
-	    conn = MySQLdb.connect(host = conf.db.host,
-	        user = conf.db.user,
-	        password = conf.db.pwd,
-	        database = conf.db.db,
-	        port = conf.db.port)
-        cursor=conn.cursor()
+tableIncoming = "incoming_2018023"
+tableArchive = "tarchive"
+tablePublic = "tpublic"
 
-cursor.close()
-conn.close()
-    
-exit(0)	
+try:
+	#"insert into tarchive(pkey) select private from incoming order by id"
+	#"insert into tpublic(address) select address from incoming order by id"
+	#"select count(*) from tpublic"
+	#"select count(*) from tarchive"
+	#"insert into tpublic(address) select address from incoming order by id"
+	queryPrivkey = "insert into %s(pkey) select private from %s order by id" % (tableArchive, tableIncoming)
+	queryAddress = "insert into %s(address) select address from %s order by id" % (tablePublic, tableIncoming)
+
+	print("Archiving private keys")
+	cursor.execute(queryPrivkey, [])
+
+	print("Publishing addresses")
+	cursor.execute(queryAddress, [])
+
+	queryCountPublic = "select count(*) from %s" % tablePublic
+	queryCountArchive = "select count(*) from %s" % tableArchive
+
+	cursor.execute(queryCountPublic, [])
+	pubCount = cursor.fetchone()[0]
+	cursor.execute(queryCountArchive, [])
+	privCount = cursor.fetchone()[0]
+
+	print "pub. count: %d" % pubCount
+	print "pri. count: %d" % privCount
+
+	if(privCount != pubCount):
+		print "Different count error"
+		exit(2)
+
+	# Check first of incoming
+	cursor.execute("select * from %s ORDER BY id ASC LIMIT 1" % tableIncoming)
+	#print cursor.fetchone()
+	first = cursor.fetchone()
+
+	cursor.execute("select * from "+tablePublic+" WHERE address = %s", [first[1]] )
+	firstPublic = cursor.fetchone()
+
+	cursor.execute("select * from "+tableArchive+" WHERE public_id = %s", [firstPublic[0]] )
+	firstArchive = cursor.fetchone()
+
+	if(firstArchive[1] != first[2]):
+		print "First entry does not match between incoming and public-archive"
+		exit(2)
+
+	# Check last of incoming
+	cursor.execute("select * from %s ORDER BY id DESC LIMIT 1" % tableIncoming)
+	first = cursor.fetchone()
+
+	cursor.execute("select * from "+tablePublic+" WHERE address = %s", [first[1]] )
+	firstPublic = cursor.fetchone()
+
+	cursor.execute("select * from "+tableArchive+" WHERE public_id = %s", [firstPublic[0]] )
+	firstArchive = cursor.fetchone()
+
+	if(firstArchive[1] != first[2]):
+		print "LAST entry does not match between incoming and public-archive"
+		exit(2)
+
+	print "Checks OK, truncating incoming..."
+	cursor.execute("TRUNCATE table %s" % tableIncoming)
+
+	conn.commit()
+except MySQLdb.Error,e:
+    print("Exception")
+    print e[0], e[1]
+    conn.rollback()
+    cursor.close()
+    conn.close()
+	
+exit(0)
