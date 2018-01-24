@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import binascii, hashlib, base58, secp256k1, threading, MySQLdb,os,time, yaml, time
+import binascii, hashlib, base58, secp256k1, threading, MySQLdb,os,time, yaml, time, datetime
 from dotmap import DotMap
 import signal, sys
 
@@ -13,6 +13,7 @@ class myThread (threading.Thread):
     cursor = None
     thread_id = 0
     rows = []
+    table = ""
 
     def __init__(self, conf, thread_id):
         self.conf = conf
@@ -52,14 +53,39 @@ class myThread (threading.Thread):
         self.cursor = self.conn.cursor()
 
     def closeConnection(self):
-        self.close()
+        self.cursor.close()
         self.conn.close()
+    
+    def selectdb(self):
+		newtable = "incoming_" + datetime.date.today().strftime("%Y") + datetime.date.today().strftime("%j")
+		if(self.table != newtable):
+			self.table = newtable
+		else:
+			return
+		try:
+			self.cursor.execute("SELECT 1 FROM "+self.table+" LIMIT 1");
+			print "Selected table " + self.table
+			return
+		except (MySQLdb.Error, MySQLdb.Warning) as e:
+			sql = 'CREATE TABLE ' + self.table + ' (id int(20) UNSIGNED NOT NULL, address binary(24) NOT NULL,private binary(32) NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=binary;'
+			self.cursor.execute(sql)
+			sql = 'ALTER TABLE ' + self.table +' ADD PRIMARY KEY (`id`);'
+			self.cursor.execute(sql)
+			sql = 'ALTER TABLE ' + self.table +' MODIFY `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=0;'
+			self.cursor.execute(sql)
+		try:
+			self.cursor.execute("SELECT 1 FROM "+self.table+" LIMIT 1");
+			print "Created table " + self.table
+		except (MySQLdb.Error, MySQLdb.Warning) as e:
+			print "Table couldn't be created"
+			print e
+			exit(1)
     
     def savegen(self):
         saved = None
         while( not saved):
             try:
-                self.cursor.executemany("INSERT INTO incoming(private, address) values(%s, %s);", self.rows)
+                self.cursor.executemany("INSERT INTO " + self.table +"(private, address) values(%s, %s);", self.rows)
                 self.conn.commit()
                 saved = True
             except (MySQLdb.Error, MySQLdb.Warning) as e:
@@ -74,7 +100,8 @@ class myThread (threading.Thread):
         max_range = self.conf.worker.batch_and_insert_size
         i = 0
         while (self.conf.worker.lifetime == 0 or i < self.conf.worker.lifetime):
-                self.rows=[]
+                self.selectdb()
+                self.rows = []
                 listdir_time = self.timereps(max_range, lambda: self.gen())
                 print("Thread %d : %d keypairs/s" % (self.thread_id, 1 / listdir_time))
                 self.savegen()
