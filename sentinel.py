@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# sentinel.py : checks a bitcoin address against a binary table
+# sentinel.py : checks a table agains another
 
 import binascii, hashlib, base58, secp256k1, threading, MySQLdb, yaml
 from dotmap import DotMap
@@ -7,52 +7,7 @@ from dotmap import DotMap
 # load config
 conf = DotMap(yaml.safe_load(open("./brt.yml")))
 
-# Confirm @ https://www.bitaddress.org
-
 decode_hex = binascii.unhexlify
-
-def gen_address(public_key,raw=False):
-  # perform SHA-256 hashing on the public key
-  sha256 = hashlib.sha256()
-  sha256.update( decode_hex(public_key) )
-  hash = sha256.hexdigest()
-  
-  # public key hash (for p2pkh) - perform RIPEMD-160 hashing on the result of SHA-256
-  # prepend mainnet version byte
-  ripemd160 = hashlib.new('ripemd160')
-  ripemd160.update( decode_hex(hash) )
-  public_key_hash = ripemd160.hexdigest()
-  mainnet_public_key_hash = '00' + public_key_hash
-  
-  # perform SHA-256 hash on the extended RIPEMD-160 result
-  sha256 = hashlib.sha256()
-  sha256.update( decode_hex(mainnet_public_key_hash) )
-  hash = sha256.hexdigest()
-  
-  # perform SHA-256 on the previous SHA-256 hash
-  sha256 = hashlib.sha256()
-  sha256.update( decode_hex(hash) )
-  hash = sha256.hexdigest()
-  
-  # create a checksum using the first 4 bytes of the previous SHA-256 hash
-  # appedend the 4 checksum bytes to the extended RIPEMD-160 hash
-  checksum = hash[:8]
-  hash = mainnet_public_key_hash + checksum
-  
-  # convert RIPEMD-160 + checksum into base58 encoded string
-  if(raw):
-    return decode_hex(hash)
-  else:
-    return base58.b58encode( decode_hex(hash) )
-
-# Start:
-
-lookingfor='1QJnVsWcLgFYz9qFcWb8bQt2ZLaW1nWofM'
-print("Looking for : "+ lookingfor)
-
-# lookup without byte version
-decoded = base58.b58decode(lookingfor)[1:]
-print("Hex address: " + binascii.hexlify(decoded))
 
 conn = MySQLdb.connect(host = conf.db.host,
 	user = conf.db.user,
@@ -61,11 +16,59 @@ conn = MySQLdb.connect(host = conf.db.host,
 	port = conf.db.port)
 	
 cursor=conn.cursor()
-sql = "SELECT * FROM incoming WHERE address = %s";
-args = [decoded]
-cursor.execute(sql,args)
-data=cursor.fetchall()
-if(data):
-  print('Found!')
+step = 50
+found_line = True
+i = 1
+values = []
 
-print(data)
+while (found_line):
+	try:
+		sql = "SELECT * FROM binarych LIMIT %d, %d" % (i * step, step);
+		cursor.execute(sql, [])
+		data=cursor.fetchall()
+		
+		if not data:
+			found_line = None
+			continue
+			
+		addresses = []
+			
+		for row in data:
+			#~ print row[0]
+			addresses.append([row[0]])
+			
+		
+		#~ addresses.append([[decode_hex('000000982fe094c3a9ce67e8ed1ab5de114c0cf15da7e8fe')]])
+		#~ addresses = [[decode_hex('000000982fe094c3a9ce67e8ed1ab5de114c0cf15da7e8fe')]]s
+			
+		print addresses
+		
+		i += 1
+		
+		# reconnect
+		cursor.executemany("SELECT * FROM tpublic WHERE address IN (%s)", addresses)
+		
+		data = cursor.fetchall()
+		print data
+		
+		if(data):
+			print "Found"
+			print data
+			exit(0)
+			
+		#~ exit(0)
+	except MySQLdb.Error,e:
+		values = []
+		print "Exception"
+		print e[0]
+		i += 1
+		exit(0)
+		#conn.rollback()
+		#cursor.close()
+		#conn.close()
+		#~ exit(2)
+
+cursor.close()
+conn.close()
+    
+exit(0)	
