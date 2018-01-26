@@ -10,10 +10,6 @@ conf = DotMap(yaml.safe_load(open("./brt.yml")))
 decode_hex = binascii.unhexlify
 
 # Select oldest
-conf.db.host = "192.168.0.50"
-conf.db.user = "brt"
-conf.db.pwd = "pass"
-conf.db.db = "brt"
 conn = MySQLdb.connect(host = conf.db.host,
 	user = conf.db.user,
 	password = conf.db.pwd,
