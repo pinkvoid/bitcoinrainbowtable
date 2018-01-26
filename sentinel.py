@@ -2,6 +2,7 @@
 # sentinel.py : checks a table agains another
 
 import binascii, hashlib, base58, secp256k1, threading, MySQLdb, yaml
+from subprocess import call
 from dotmap import DotMap
 
 # load config
@@ -34,41 +35,35 @@ while (found_line):
 		addresses = []
 			
 		for row in data:
-			#~ print row[0]
 			addresses.append([row[0]])
-			
 		
 		#~ addresses.append([[decode_hex('000000982fe094c3a9ce67e8ed1ab5de114c0cf15da7e8fe')]])
 		#~ addresses = [[decode_hex('000000982fe094c3a9ce67e8ed1ab5de114c0cf15da7e8fe')]]s
-			
+		
 		print addresses
 		
 		i += 1
 		
 		# reconnect
-		cursor.executemany("SELECT * FROM tpublic WHERE address IN (%s)", addresses)
+		cursor.executemany("SELECT * FROM public WHERE address IN (%s)", addresses)
 		
 		data = cursor.fetchall()
 		print data
 		
 		if(data):
-			print "Found"
+			found = binascii.hexlify(data[0][0])
+			print "Found:"
+			print found
+			for mail in conf.subscribers:
+				call("echo Found %s | gpg --armor --recipient %s --encrypt --trust-model always | mail -s BRT! %s" % (mail, found, mail), shell=True)
 			print data
 			exit(0)
 			
-		#~ exit(0)
 	except MySQLdb.Error,e:
-		values = []
 		print "Exception"
 		print e[0]
-		i += 1
-		exit(0)
-		#conn.rollback()
-		#cursor.close()
-		#conn.close()
-		#~ exit(2)
+		exit(2)
 
 cursor.close()
 conn.close()
-    
 exit(0)	
