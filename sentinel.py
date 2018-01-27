@@ -45,17 +45,16 @@ while (found_line):
 		i += 1
 		
 		# reconnect
-		cursor.executemany("SELECT * FROM public WHERE address IN (%s)", addresses)
+		cursor.executemany("SELECT * FROM published WHERE address IN (%s)", addresses)
 		
 		data = cursor.fetchall()
 		print data
 		
 		if(data):
 			found = binascii.hexlify(data[0][0])
-			print "Found:"
-			print found
+			print "Found: " + found
 			for mail in conf.subscribers:
-				call("echo Found %s | gpg --armor --recipient %s --encrypt --trust-model always | mail -s BRT! %s" % (mail, found, mail), shell=True)
+				call("echo Found %s | gpg --armor --recipient %s --encrypt --trust-model always | mail -s BRT! %s" % (found, mail, mail), shell=True)
 			print data
 			exit(0)
 			
