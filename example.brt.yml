@@ -10,3 +10,5 @@ worker:
   thread_start_delay: 3
   batch_and_insert_size: 100
   lifetime: 0
+subscribers:
+  - some-mail@provider
